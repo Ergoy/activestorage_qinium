@@ -5,7 +5,7 @@ module ActiveStorage
     attr_reader :qiniu
 
     delegate :config, :client, to: :qiniu
-    delegate :settings, :bucket_private, :bucket, :access_key, :secret_key, :domain,
+    delegate :settings, :public, :bucket, :access_key, :secret_key, :domain,
               :protocol, :put_policy_options,
              to: :config
 
@@ -36,8 +36,7 @@ module ActiveStorage
     def form_data_for_direct_upload(key, expires_in:, content_type:, content_length:, checksum:, **)
       put_policy = Qinium::PutPolicy.new(config, key: key, expires_in: expires_in)
       put_policy.fsize_limit = content_length.to_i + 1000
-      # OPTIMIZE: 暂时关闭文件类型限制，避免 xmind 文件无法上传
-      put_policy.mime_limit = nil
+      put_policy.mime_limit = content_type
       put_policy.detect_mime = 1
       put_policy.insert_only = 1
       {
@@ -127,15 +126,16 @@ module ActiveStorage
                 "attname=#{attname}"
               end
 
-        url = if bucket_private
+        url = if public
+                url_encoded_key = key.split('/').map { |x| CGI.escape(x) }.join('/')
+                ["#{protocol}://#{domain}/#{url_encoded_key}", fop].compact.join('?')
+              else
                 expires_in = options[:expires_in] ||
                              Rails.application.config.active_storage.service_urls_expire_in ||
                              3600
-                qiniu.auth.authorize_download_url(settings, domain, key,
+                Qinium::Auth.authorize_download_url(domain, key,
+                                                  access_key, secret_key,
                                                   schema: protocol, fop: fop, expires_in: expires_in)
-              else
-                url_encoded_key = key.split('/').map { |x| CGI.escape(x) }.join('/')
-                ["#{protocol}://#{domain}/#{url_encoded_key}", fop].compact.join('?')
               end
 
         payload[:url] = url
@@ -143,7 +143,7 @@ module ActiveStorage
       end
     end
 
-    private
+    public
 
     def items_for(prefix = '')
       _code, data, _headers = qiniu.object.list(prefix: prefix)
