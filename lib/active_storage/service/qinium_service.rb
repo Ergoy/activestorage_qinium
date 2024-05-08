@@ -131,7 +131,8 @@ module ActiveStorage
                 expires_in = options[:expires_in] ||
                              Rails.application.config.active_storage.service_urls_expire_in ||
                              3600
-                qiniu.auth.authorize_download_url(settings, domain, key,
+                Qinium::Auth.authorize_download_url(domain, key,
+                                                  access_key, secret_key,
                                                   schema: protocol, fop: fop, expires_in: expires_in)
               else
                 url_encoded_key = key.split('/').map { |x| CGI.escape(x) }.join('/')
